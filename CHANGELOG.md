@@ -10,6 +10,15 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Adicionado
+
+- **Histórico do chat.** Nos detalhes de um agente, o botão **Histórico do chat** abre uma janela com a conversa
+  inteira da sessão, só os seus prompts e as respostas, em balões e com o texto completo (o terminal mostra só o
+  fim da conversa e corta os textos longos). Abre nas mensagens mais recentes; rolar até o topo, ou **Carregar
+  mensagens anteriores**, volta até o começo da sessão, mesmo em transcripts de centenas de MB. As mensagens novas
+  chegam sozinhas, cada uma tem o botão de copiar, e a caixa de mensagem do rodapé manda o próximo pedido ao agente.
+  Mesma trava do terminal: só com acesso local (`GET /api/agents/:id/chat`).
+
 ## [1.0.3] - 2026-10-16
 
 ### Corrigido

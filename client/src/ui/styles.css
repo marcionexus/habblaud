@@ -11147,3 +11147,122 @@ html.is-replay #world {
 .ui-world-chip__visitors[hidden] {
   display: none;
 }
+
+/* Histórico do chat (ui/chat.ts): a janela do terminal (.ui-term) com a conversa em balões, na fonte da interface. */
+.ui-chat-cta {
+  margin-top: 6px;
+}
+
+.ui-chat__count {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--ui-faint);
+  white-space: nowrap;
+}
+
+.ui-term.ui-chat .ui-term__scroll {
+  font: 13.5px/1.55 var(--font-ui);
+}
+
+.ui-chat__older {
+  display: flex;
+  margin: 0 auto 14px;
+}
+
+.ui-chat__older[hidden] {
+  display: none;
+}
+
+.ui-chat__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ui-chat__day {
+  margin: 4px 0 0;
+}
+
+.ui-chat__msg {
+  max-width: min(82%, 760px);
+  padding: 8px 12px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--ui-line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ui-text);
+}
+
+.ui-chat__msg.is-user {
+  align-self: flex-end;
+  border-color: rgba(124, 200, 255, 0.32);
+  background: var(--ui-accent-soft);
+}
+
+.ui-chat__msg.is-agent {
+  align-self: flex-start;
+}
+
+.ui-chat__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  margin-bottom: 2px;
+  font-size: 11.5px;
+  color: var(--ui-muted);
+}
+
+.ui-chat__who {
+  font-weight: 700;
+  color: #f3f6fc;
+}
+
+.ui-chat__msg.is-user .ui-chat__who {
+  color: var(--ui-accent);
+}
+
+.ui-chat__copy {
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+
+.ui-chat__msg:hover .ui-chat__copy,
+.ui-chat__msg:focus-within .ui-chat__copy {
+  opacity: 1;
+}
+
+.ui-chat__copy.is-copied {
+  opacity: 1;
+  color: var(--st-working);
+}
+
+.ui-chat__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ui-chat__text.ui-md {
+  white-space: normal;
+}
+
+.ui-chat__more {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ui-accent);
+  cursor: pointer;
+}
+
+.ui-chat__more:hover {
+  text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-chat__copy {
+    transition: none;
+  }
+}

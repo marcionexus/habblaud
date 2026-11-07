@@ -405,6 +405,9 @@ class Parser implements TerminalParser {
   private fork?: 'expect-spawn' | 'expect-result';
   private inheritedSpawn?: string;
 
+  /** `textMax`: limite dos prompts e das respostas (o histórico do chat pede um bem maior que o do terminal). */
+  constructor(private readonly textMax = TEXT_MAX) {}
+
   push(line: string): TerminalEntry[] {
     this.out = [];
     try {
@@ -456,7 +459,7 @@ class Parser implements TerminalParser {
   // ---------------------------------------------------------------- entradas
 
   private userEntry(c: Ctx, raw: string): void {
-    const text = marked(prepare(raw, TEXT_MAX));
+    const text = marked(prepare(raw, this.textMax));
     if (text) this.emit({ kind: 'user', id: `${c.uuid}:u`, at: c.at, text });
   }
 
@@ -672,7 +675,7 @@ class Parser implements TerminalParser {
             if (!NO_RESPONSE.test(t.trim())) this.sysContent(c, t, 'info', undefined, `:${i}`);
             return;
           }
-          const text = marked(prepare(t, TEXT_MAX));
+          const text = marked(prepare(t, this.textMax));
           if (text) this.emit({ kind: 'assistant', id, at: c.at, text });
           return;
         }
@@ -767,7 +770,12 @@ class Parser implements TerminalParser {
   }
 }
 
+export interface TerminalParserOptions {
+  /** Limite (caracteres) dos prompts e das respostas; padrão: TEXT_MAX. */
+  textMax?: number;
+}
+
 /** Parser com estado: uma instância por leitura de arquivo, alimentada linha a linha, na ordem do arquivo. */
-export function createTerminalParser(): TerminalParser {
-  return new Parser();
+export function createTerminalParser(o: TerminalParserOptions = {}): TerminalParser {
+  return new Parser(o.textMax ?? TEXT_MAX);
 }

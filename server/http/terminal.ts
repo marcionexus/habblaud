@@ -11,10 +11,12 @@
 // Sessões do histórico (GET /api/sessions/:conta/:sessionId/terminal, http/sessions.ts) usam o mesmo
 // leitor sobre o transcript já validado pela rota, com polling mais espaçado (~2 s).
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { basename } from 'node:path';
 import { demoTerminalEntries } from '../../shared/demo/terminal';
-import type { Activity, AgentInfo, TerminalEntry, TerminalInit } from '../../shared/types';
+import type { Activity, AgentInfo, ChatMessage, ChatPage, TerminalEntry, TerminalInit } from '../../shared/types';
 import { errMsg, log } from '../log';
 import type { Office } from '../model/office';
+import { CHAT_TEXT_MAX, readChatAfter, readChatBefore } from '../sources/chat';
 import { FileTail } from '../sources/tail';
 import { createTerminalParser, type TerminalParser } from '../sources/terminal';
 import { sendJson } from './app';
@@ -75,6 +77,13 @@ interface ConversationSource {
   /** Conversa recente, para o `init`. */
   load(): TerminalInit;
   poll(): PollResult;
+}
+
+/** Cursor do histórico do chat: ausente = undefined; um inteiro >= 0 = a posição; qualquer outra coisa = null (inválido). */
+function chatCursor(raw: string | null): number | undefined | null {
+  if (raw === null) return undefined;
+  if (!/^\d{1,15}$/.test(raw)) return null;
+  return Number(raw);
 }
 
 /** Passa as linhas pelo parser; uma linha que o faça falhar é pulada sem perder o resto do lote. */
@@ -243,6 +252,56 @@ export class TerminalStreams {
   attachSession(req: IncomingMessage, res: ServerResponse, streamId: string, path: string, createParser?: () => TerminalParser): void {
     const o = { transcriptPathOf: () => undefined, createParser: createParser ?? this.createParser, initTailBytes: this.initTailBytes, initEntries: this.initEntries };
     this.serve(req, res, streamId, new TranscriptSource(streamId, path, o, this.sessionPollMs));
+  }
+
+  /**
+   * Histórico do chat (GET /api/agents/:id/chat): uma página da conversa do agente, só prompts e respostas, com o texto
+   * inteiro (ver sources/chat.ts). `key` + `before` (anteriores) ou `after` (novas) vêm da página que o cliente já tem;
+   * sem cursor, ou com o `key` de um transcript que não é mais o do agente, devolve as mais recentes.
+   */
+  chat(res: ServerResponse, agentId: string, q: URLSearchParams): void {
+    const office = this.opts.office;
+    if (!office.has(agentId)) {
+      const d = agentId.startsWith(DEMO_PREFIX) ? office.detail(agentId) : undefined;
+      if (!d) return sendJson(res, 404, { error: tr('agente não encontrado') });
+      // Demo: a conversa fictícia inteira a cada pedido (o cliente descarta os ids que já tem).
+      const messages = this.demoEntries(d.agent, d.history).flatMap((e): ChatMessage[] =>
+        e.kind === 'user' || e.kind === 'assistant' ? [{ id: e.id, at: e.at, role: e.kind, text: e.text }] : [],
+      );
+      const page: ChatPage = { agentId, key: 'demo', messages, start: 0, end: 0, hasMore: false };
+      return sendJson(res, 200, page);
+    }
+    const path = this.opts.transcriptPathOf(agentId);
+    if (!path) return sendJson(res, 404, { error: tr('transcript do agente não encontrado') });
+    const before = chatCursor(q.get('before'));
+    const after = chatCursor(q.get('after'));
+    if (before === null || after === null) return sendJson(res, 400, { error: tr('cursor inválido') });
+    const key = basename(path);
+    const same = q.get('key') === key;
+    // Codex: o parser da ferramenta dele; Claude Code: o do terminal, sem o corte de 20 mil caracteres.
+    const parserFor = this.opts.parserFor;
+    const codex = office.detail(agentId)?.agent.provider === 'codex';
+    const createParser = codex && parserFor ? () => parserFor(agentId) ?? this.createParser() : () => createTerminalParser({ textMax: CHAT_TEXT_MAX });
+    try {
+      if (same && after !== undefined) {
+        const r = readChatAfter(path, after, createParser);
+        if (!r.reset) {
+          const page: ChatPage = { agentId, key, messages: r.messages, start: r.start, end: r.end, hasMore: false, more: r.more };
+          return sendJson(res, 200, page);
+        }
+      } else if (same && before !== undefined) {
+        const r = readChatBefore(path, before, createParser);
+        return sendJson(res, 200, { agentId, key, ...r } satisfies ChatPage);
+      }
+      // Primeira página, transcript trocado (/clear) ou encolhido: as mais recentes, substituindo o que o cliente tinha.
+      const r = readChatBefore(path, undefined, createParser);
+      const page: ChatPage = { agentId, key, ...r };
+      if (before !== undefined || after !== undefined) page.reset = true;
+      return sendJson(res, 200, page);
+    } catch (err) {
+      log.warnOnce(`chat:${agentId}:${errMsg(err)}`, tr('Histórico do chat de {0}: não foi possível ler o transcript ({1}).', [agentId, errMsg(err)]));
+      return sendJson(res, 500, { error: tr('não foi possível ler o transcript') });
+    }
   }
 
   /** Limite de terminais, `init` e o stream SSE de uma fonte já escolhida. */

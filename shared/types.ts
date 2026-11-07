@@ -520,6 +520,41 @@ export interface TerminalInit {
  */
 export type TerminalMessage = { type: 'init'; data: TerminalInit } | { type: 'append'; data: TerminalEntry[] };
 
+// ------------------------------------------------------------------ histórico do chat
+
+/** Uma mensagem do histórico do chat: um prompt seu ou o texto de uma resposta do agente, inteiro (com segredos mascarados). */
+export interface ChatMessage {
+  /** = id da TerminalEntry de origem (o mesmo em qualquer leitura do transcript). */
+  id: string;
+  at: number;
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+/**
+ * Uma página do histórico do chat, em GET /api/agents/:id/chat: sem cursor, as mensagens mais recentes;
+ * `?key=…&before=<start>`, as anteriores a uma página já carregada; `?key=…&after=<end>`, as que chegaram depois.
+ * Os cursores são posições (bytes) no transcript identificado por `key`. Erros respondem JSON `{error}`: 400 (cursor
+ * inválido), 403 (recurso desligado ou acesso que não é local), 404 (agente ou transcript desconhecido).
+ */
+export interface ChatPage {
+  agentId: string;
+  /** O transcript lido (muda com /clear): cursores de outro `key` não valem. */
+  key: string;
+  /** Da mais antiga para a mais recente. */
+  messages: ChatMessage[];
+  /** Começo do trecho lido (sempre um começo de linha): o cursor `before` para carregar as anteriores. */
+  start: number;
+  /** Fim do trecho lido (sempre um fim de linha): o cursor `after` para as novas. */
+  end: number;
+  /** Há conversa antes de `start`. */
+  hasMore: boolean;
+  /** Numa página `after`: ainda há conversa nova além de `end` (o limite por leitura foi atingido). */
+  more?: boolean;
+  /** O transcript foi trocado ou encolheu: esta página substitui tudo o que o cliente tinha. */
+  reset?: boolean;
+}
+
 /**
  * Uma sessão recente (aberta ou já encerrada) no histórico do terminal, em
  * GET /api/sessions/recent. A conversa de uma sessão encerrada sai, com o mesmo protocolo do terminal

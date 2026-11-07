@@ -98,6 +98,8 @@ export interface ApiDeps {
 
 /** GET /api/agents/:id/terminal (ids nunca contêm '/'). */
 const TERMINAL_ROUTE = /^\/api\/agents\/([^/]+)\/terminal$/;
+/** GET /api/agents/:id/chat: histórico do chat (ver TerminalStreams.chat). */
+const CHAT_ROUTE = /^\/api\/agents\/([^/]+)\/chat$/;
 /** POST /api/agents/:id/stop|takeover (terminal interativo). */
 const AGENT_ACTION_ROUTE = /^\/api\/agents\/[^/]+\/(stop|takeover)$/;
 
@@ -429,6 +431,26 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
           return true;
         }
         terminals.attach(req, res, id);
+      }
+      return true;
+    }
+    // Histórico do chat: a conversa inteira, então a mesma trava do terminal.
+    const chatMatch = CHAT_ROUTE.exec(path);
+    if (chatMatch) {
+      if (method !== 'GET') methodNotAllowed(res, 'GET');
+      else if (!terminals) {
+        sendJson(res, 403, { error: tr('histórico do chat desligado: ele só funciona com o Habblaud acessível apenas pelo próprio computador') });
+      } else if (!trusted(req, 'terminal')) {
+        sendJson(res, 403, { error: denied(req, tr('o histórico do chat só abre pelo próprio computador (http://localhost ou http://127.0.0.1)')) });
+      } else {
+        let id: string;
+        try {
+          id = decodeURIComponent(chatMatch[1]);
+        } catch {
+          sendJson(res, 400, { error: tr('id inválido') });
+          return true;
+        }
+        terminals.chat(res, id, url.searchParams);
       }
       return true;
     }

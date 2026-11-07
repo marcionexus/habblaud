@@ -46,6 +46,7 @@ import { ptyControllable } from './ptyapi';
 import { createAgentRow, updateAgentRow } from './rows';
 import { SocialSection } from './social';
 import { TERMINAL_UNAVAILABLE_HINT, type TerminalControl } from './terminal';
+import type { ChatControl } from './chat';
 import { Movable } from './movable';
 import type { PtyControl } from './pty';
 import { richText } from './usage';
@@ -219,6 +220,8 @@ class AgentView {
   /** Por que o terminal não abre: no celular não há hover para ler o title, então o toque mostra o motivo aqui. */
   private termWhy: HTMLElement;
   private termWhyTimer: ReturnType<typeof setTimeout> | null = null;
+  private chatBtn: HTMLButtonElement;
+  private chatLabel: HTMLElement;
   private alert: HTMLElement;
   private alertText: HTMLElement;
   /**
@@ -269,6 +272,7 @@ class AgentView {
     private ctx: UiContext,
     private terminal: TerminalControl,
     private pty: PtyControl,
+    private chat?: ChatControl,
   ) {
     this.avatar = createAvatarPlaceholder('lg');
     this.name = h('h2', { class: 'ui-hero__name' });
@@ -320,6 +324,17 @@ class AgentView {
     );
 
     this.termWhy = h('p', { class: 'ui-term-cta__why', hidden: true, attrs: { role: 'status' } });
+
+    // Histórico do chat: a conversa inteira, só prompts e respostas (mesma trava do terminal: acesso local).
+    this.chatLabel = h('span', { class: 'ui-term-cta__label', text: tr('Histórico do chat') });
+    const chatIcon = h('span', { class: 'ui-term-cta__icon', attrs: { 'aria-hidden': 'true' } });
+    chatIcon.innerHTML = ICONS.chat;
+    this.chatBtn = h(
+      'button',
+      { class: 'ui-btn ui-term-cta ui-chat-cta', type: 'button', hidden: !chat, attrs: { 'aria-pressed': 'false' }, on: { click: () => this.toggleChat() } },
+      chatIcon,
+      this.chatLabel,
+    );
 
     this.alertText = h('p', { class: 'ui-alert__text' });
     this.alertQuestions = h('div', { class: 'ui-ask', hidden: true });
@@ -412,6 +427,7 @@ class AgentView {
       this.gone,
       statusRow,
       this.termBtn,
+      this.chatBtn,
       this.termWhy,
       this.alert,
       this.perm.el,
@@ -508,6 +524,22 @@ class AgentView {
     else this.terminal.toggle(this.id, this.termBtn);
   }
 
+  /** Abre (ou fecha) o histórico do chat deste agente; a mesma trava do terminal (acesso local, agente presente). */
+  toggleChat(): void {
+    if (!this.id || !this.chat) return;
+    if (this.chatBtn.getAttribute('aria-disabled') === 'true') {
+      const why = this.chatBtn.title;
+      setText(this.termWhy, why);
+      setHidden(this.termWhy, false);
+      this.ctx.announce(why);
+      if (this.termWhyTimer) clearTimeout(this.termWhyTimer);
+      this.termWhyTimer = setTimeout(() => setHidden(this.termWhy, true), 8_000);
+      return;
+    }
+    setHidden(this.termWhy, true);
+    this.chat.toggle(this.id, this.chatBtn);
+  }
+
   private showTimeline(n: number): void {
     this.timelineShown = Math.max(TIMELINE_STEP, n);
     this.ctx.invalidate();
@@ -566,6 +598,7 @@ class AgentView {
     setAttr(this.followBtn, 'aria-pressed', String(following));
     this.followBtn.classList.toggle('is-on', following);
     this.renderTerminalButton(!!live);
+    this.renderChatButton(!!live);
 
     // Alerta.
     const waiting = a.status === 'waiting' && !!live;
@@ -687,6 +720,31 @@ class AgentView {
           ),
         ),
       ),
+    );
+  }
+
+  private renderChatButton(live: boolean): void {
+    if (!this.chat) return;
+    const store = this.ctx.store;
+    const available = !!store.snapshot?.meta.terminal && access().terminal && !store.replaying;
+    const open = this.chat.agentId === this.id;
+    const enabled = open || (available && live);
+    setAttr(this.chatBtn, 'aria-disabled', enabled ? null : 'true');
+    this.chatBtn.classList.toggle('is-disabled', !enabled);
+    setAttr(this.chatBtn, 'aria-pressed', String(open));
+    this.chatBtn.classList.toggle('is-on', open);
+    setText(this.chatLabel, open ? tr('Fechar histórico do chat') : tr('Histórico do chat'));
+    setTitle(
+      this.chatBtn,
+      open
+        ? tr('Fechar o histórico do chat')
+        : !available
+          ? store.replaying
+            ? tr('Sem histórico do chat no timelapse: a conversa é a de agora.')
+            : TERMINAL_UNAVAILABLE_HINT
+          : !live
+            ? tr('O agente já saiu do escritório.')
+            : tr('Ver todas as mensagens trocadas com este agente, do começo da sessão, com o texto inteiro'),
     );
   }
 
@@ -969,8 +1027,9 @@ export class Drawer implements UiComponent {
     private ctx: UiContext,
     terminal: TerminalControl,
     pty: PtyControl,
+    chat?: ChatControl,
   ) {
-    this.agentView = new AgentView(ctx, terminal, pty);
+    this.agentView = new AgentView(ctx, terminal, pty, chat);
     this.roomView = new RoomView(ctx, pty);
     this.heading = h('span', { class: 'ui-drawer__kind' });
     const close = iconButton(ICONS.close, tr('Fechar detalhes (Esc)'), () => ctx.select(null));
